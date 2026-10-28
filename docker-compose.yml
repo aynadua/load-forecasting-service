@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      LOADFC_MODEL: /app/models/model.joblib
+      LOADFC_REFERENCE: /app/models/reference.parquet
+    volumes:
+      - ./models:/app/models:ro
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
