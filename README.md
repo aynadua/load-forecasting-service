@@ -4,8 +4,8 @@ Day-ahead electricity demand forecasting for the PJM East zone, backtested
 properly and served behind an API with drift monitoring.
 
 Gradient boosting reaches **5.30% MAPE at a 24-hour horizon**, against
-**6.93%** for the strongest naive baseline — a 24% relative reduction, held
-across six consecutive years of out-of-sample testing.
+**6.93%** for the strongest naive baseline. That is a 24% relative reduction,
+held across six consecutive years of out-of-sample testing.
 
 ![fold MAPE](reports/fold_mape.png)
 
@@ -17,12 +17,12 @@ Electricity load is overwhelmingly periodic. That makes it easy to post an
 impressive-looking number and hard to post a meaningful one, for three
 reasons, and this repo is organised around all three.
 
-**A naive forecast is already good.** "Same hour yesterday" gets 6.93% MAPE on
+A naive forecast is already good. "Same hour yesterday" gets 6.93% MAPE on
 this series. Any model that does not beat that comfortably has learned
-nothing, and comparing against a mean or a linear trend instead — as portfolio
-projects often do — hides it.
+nothing, and comparing against a mean or a linear trend instead (as portfolio
+projects often do) hides it.
 
-**Lag features leak the future unless you stop them.** A day-ahead forecast is
+Lag features leak the future unless you stop them. A day-ahead forecast is
 issued before the day starts, so the most recent observed load is at least 24
 hours old. A model given `lag_1` to predict 24 hours ahead reports a
 spectacular MAPE and cannot be deployed, because at run time that value does
@@ -34,7 +34,7 @@ LeakageError: lags [1] are shorter than the 24 hour forecast horizon;
 those values are not observable when the forecast is issued
 ```
 
-**One train/test split measures one year.** Demand grew through the 2000s and
+One train/test split measures one year. Demand grew through the 2000s and
 flattened as efficiency and rooftop solar spread. A model evaluated only on
 2016 tells you about 2016.
 
@@ -62,15 +62,15 @@ Per fold, so you can see it is not one lucky year:
 
 Notes on the metrics, because the choice is not neutral:
 
-- **MASE is the one to judge on.** It divides error by a seasonal naive
+- MASE is the one to judge on. It divides error by a seasonal naive
   forecast's error on the *training* data, so 0.574 means "about 43% less
   error than seasonal naive" on a scale that does not move with the units or
   the load level. MAPE is reported because the industry reports it, but it is
   asymmetric and inflates when load is low.
-- **Peak-hour MAE is reported separately** (hours 17–20). Grid operators set
+- Peak-hour MAE is reported separately, for hours 17 to 20. Grid operators set
   reserve margins and buy spot power against the evening peak. A model that is
   accurate on average and poor at 6pm is not a useful model.
-- **The spread across folds is reported**, because a mean over six folds
+- The spread across folds is reported, because a mean over six folds
   without its variance is half a result.
 
 ![error by hour](reports/error_by_hour.png)
@@ -103,19 +103,19 @@ run, so runs are measured first and only short ones are filled.
 
 ## How it works
 
-**27 features, all observable at issue time.** Lags at 24–26, 47–49, 168 and
+All 27 features are observable at issue time. Lags at 24 to 26, 47 to 49, 168 and
 336 hours; rolling mean, standard deviation, min and max over 24-hour and
 168-hour windows ending at the horizon; a week-on-week delta; and calendar
-features — hour, day of week, month and day of year encoded as sine/cosine
+features: hour, day of week, month and day of year encoded as sine/cosine
 pairs so hour 23 is adjacent to hour 0, plus weekend and US federal holiday
 flags. Calendar features are exempt from the lag rule, correctly: the date of
 a public holiday is known years ahead.
 
-**Gradient boosting with an absolute-error objective.** Trees rather than a
+The model is gradient boosting with an absolute-error objective. Trees rather than a
 network because 145k rows of 27 tabular features is squarely where boosted
 trees win, they fit in seconds on a CPU, and permutation importance answers
 "why did the forecast move". Absolute error rather than squared because load
-has genuine extreme days — heat waves, storms — and a squared loss lets a
+has genuine extreme days (heat waves, storms) and a squared loss lets a
 handful of them pull the whole fit. The reported metric is MAE, so the
 objective is MAE.
 
@@ -138,7 +138,7 @@ annual cycle.
 
 ![importance](reports/importance.png)
 
-**One engineering note.** Computing that importance takes 7 seconds with
+One engineering note. Computing that importance takes 7 seconds with
 native threads capped at 2, and over 100 minutes uncapped. The work is
 identical; the difference is OpenMP spin-wait between several hundred short
 predictions, each far too small to amortise waking every core.
@@ -159,7 +159,7 @@ loadfc serve      # or: docker compose up --build
 | `GET /drift` | PSI and KS of recent requests against training data |
 | `GET /metrics` | Prometheus exposition format |
 
-**The service refuses rather than guesses.** A request whose history is too
+The service refuses rather than guesses. A request whose history is too
 short, has a gap, has duplicate timestamps, or asks for more hours than the
 model's horizon gets a 422 naming the rule it broke. A forecasting service
 that silently produces plausible numbers from insufficient input is worse than
@@ -170,7 +170,7 @@ curl -s localhost:8000/forecast -H 'Content-Type: application/json' \
   -d '{"history": [{"timestamp": "2018-06-01 00:00:00", "load_mw": 31000}, ...], "steps": 24}'
 ```
 
-**Drift monitoring is built into the serving path**, not a separate batch job.
+Drift monitoring is built into the serving path, not a separate batch job.
 Every served request goes into a ring buffer that `/drift` scores against the
 training distribution with Population Stability Index and a two-sample
 Kolmogorov–Smirnov test, and the largest PSI is exported as a Prometheus gauge.
@@ -178,8 +178,8 @@ PSI bands follow the industry convention: below 0.10 stable, 0.10–0.25
 moderate, above 0.25 significant.
 
 Drift detection cannot tell you the model is wrong. It tells you the data no
-longer resembles what the model was fitted on, which is a reason to look — and
-for a forecaster that otherwise fails silently, that is worth a lot.
+longer resembles what the model was fitted on, which is a reason to look. For
+a forecaster that otherwise fails silently, that is worth a lot.
 
 `docker compose up` brings up the API with Prometheus already scraping it.
 
@@ -230,19 +230,19 @@ pytest
 
 ## Honest limits
 
-- **No weather.** This is the big one. Electricity load is driven by
+- No weather. This is the big one. Electricity load is driven by
   temperature more than by anything else, and a day-ahead forecast with
   weather forecasts as inputs would beat 5.30% comfortably. The series used
   here carries load only. Adding a temperature feed is the single highest-value
   change and is not done.
-- **One horizon.** Everything is trained and evaluated at 24 hours. Operators
+- One horizon. Everything is trained and evaluated at 24 hours. Operators
   want 1 hour to 7 days, which means either several models or a direct
   multi-horizon formulation.
-- **Point forecasts only.** Reserve planning needs intervals, not a single
+- Point forecasts only. Reserve planning needs intervals, not a single
   number. Quantile regression over the same features would give them cheaply.
-- **The data ends in 2018.** Nothing here has seen COVID demand patterns, and
+- The data ends in 2018. Nothing here has seen COVID demand patterns, and
   that is exactly the kind of regime change the drift endpoint exists to flag.
-- **Drift is monitored on inputs, not outcomes.** Prediction error against
+- Drift is monitored on inputs, not outcomes. Prediction error against
   realised load is the signal that actually matters; it needs the actuals to
   arrive, which this service does not yet ingest.
 
